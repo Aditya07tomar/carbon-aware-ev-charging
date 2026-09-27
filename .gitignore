@@ -1,0 +1,40 @@
+# ── Environment ──────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# ── Node ─────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+
+# ── IDE ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ── ML Artifacts (large binary files) ────────────────────
+backend/model_artifact.joblib
+backend/model_artifact_dir/
+
+# ── Misc ─────────────────────────────────────────────────
+*.log
+celerybeat-schedule
+celerybeat-schedule.db
+.agents/

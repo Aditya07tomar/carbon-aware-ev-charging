@@ -1,0 +1,4 @@
+scenario,sessions,total_co2_kg,mean_co2_kg,total_cost_usd,mean_cost_usd,total_energy_kwh,total_start_stop_cycles,mean_start_stop_cycles,mean_charging_blocks,co2_reduction_pct,cost_reduction_pct,cycle_change_pct
+Dumb Charging,1000,3767.6591,3.7677,4434.408,4.4344,17251.2,1000,1.0,1.0,0.0,0.0,0.0
+Proposed Method,1000,3045.927,3.0459,3571.992,3.572,17251.2,1012,1.012,1.012,19.16,19.45,-1.2
+Smart Price,1000,3490.4994,3.4905,3272.184,3.2722,17251.2,1204,1.204,1.204,7.36,26.21,-20.4
