@@ -754,3 +754,31 @@ async def _execute_smartcar_command_async(
         command, session_id, summary["delay_seconds"],
     )
     return summary
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Synchronous Execution (for deployment without Redis/Celery)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def _run_schedule_sync(
+    session_id: str,
+    w_carbon: float = 1.0,
+    w_price: float = 0.5,
+    w_degradation: float = 2.0,
+    charger_power_kw: float = 7.2,
+) -> dict:
+    """
+    Run schedule generation synchronously (called from FastAPI when Redis is unavailable).
+    This is the same logic as the Celery task but runs inline.
+    """
+    logger.info("_run_schedule_sync: Running inline for session=%s", session_id)
+    try:
+        result = await _generate_schedule_async(
+            session_id, w_carbon, w_price, w_degradation, charger_power_kw
+        )
+        return result
+    except Exception as e:
+        logger.exception("_run_schedule_sync: Failed for session %s", session_id)
+        await _mark_session_failed(session_id)
+        raise

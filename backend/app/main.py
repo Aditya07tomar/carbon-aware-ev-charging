@@ -67,10 +67,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # ── Startup ──
     logger.info("Starting Carbon-Aware EV Charging API [%s]", settings.app_env)
-
-    if settings.app_env == "development":
-        await init_db()
-        logger.info("Database tables created (development mode)")
+    await init_db()
+    logger.info("Database tables verified/created")
 
     yield
 
@@ -98,14 +96,19 @@ def create_app() -> FastAPI:
     )
 
     # ── CORS ────────────────────────────────────────────────────────────────
+    cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+    if settings.frontend_url:
+        cors_origins.append(settings.frontend_url)
+        # Also allow without trailing slash and www variant
+        cors_origins.append(settings.frontend_url.rstrip("/"))
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-        ] if settings.app_env == "development" else [],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -692,29 +695,55 @@ def create_app() -> FastAPI:
         await db.commit()
         await db.refresh(session)
 
-        # Enqueue the Celery task
-        task = generate_charging_schedule.apply_async(
-            kwargs={
-                "session_id": session.id,
-                "w_carbon": request.w_carbon,
-                "w_price": request.w_price,
-                "w_degradation": request.w_degradation,
-                "charger_power_kw": request.charger_power_kw,
-            },
-            queue="scheduling",
-        )
-
-        logger.info(
-            "Schedule generation enqueued: session=%s task=%s",
-            session.id, task.id,
-        )
-
-        return ScheduleGenerateResponse(
-            task_id=task.id,
-            session_id=session.id,
-            status="queued",
-            message="Charging schedule generation has been enqueued.",
-        )
+        # Try Celery first, fall back to synchronous execution
+        try:
+            import redis as redis_lib
+            r = redis_lib.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
+            r.ping()
+            # Redis is available — use Celery
+            task = generate_charging_schedule.apply_async(
+                kwargs={
+                    "session_id": session.id,
+                    "w_carbon": request.w_carbon,
+                    "w_price": request.w_price,
+                    "w_degradation": request.w_degradation,
+                    "charger_power_kw": request.charger_power_kw,
+                },
+                queue="scheduling",
+            )
+            logger.info(
+                "Schedule generation enqueued: session=%s task=%s",
+                session.id, task.id,
+            )
+            return ScheduleGenerateResponse(
+                task_id=task.id,
+                session_id=session.id,
+                status="queued",
+                message="Charging schedule generation has been enqueued.",
+            )
+        except Exception:
+            # Redis not available — run synchronously
+            logger.info("Redis not available, running schedule generation synchronously")
+            import uuid as _uuid
+            sync_task_id = str(_uuid.uuid4())
+            try:
+                from app.tasks import _run_schedule_sync
+                result = await _run_schedule_sync(
+                    session_id=session.id,
+                    w_carbon=request.w_carbon,
+                    w_price=request.w_price,
+                    w_degradation=request.w_degradation,
+                    charger_power_kw=request.charger_power_kw,
+                )
+                return ScheduleGenerateResponse(
+                    task_id=sync_task_id,
+                    session_id=session.id,
+                    status="completed_sync",
+                    message="Schedule generated synchronously.",
+                )
+            except Exception as e:
+                logger.error("Sync schedule generation failed: %s", e, exc_info=True)
+                raise HTTPException(status_code=500, detail=str(e))
 
     @application.get(
         "/schedule/status/{task_id}",

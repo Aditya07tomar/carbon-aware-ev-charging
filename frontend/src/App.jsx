@@ -199,15 +199,17 @@ export default function App() {
 
     try {
       // 1. Submit to backend
-      const { task_id, session_id } = await generateSchedule(
+      const { task_id, session_id, status } = await generateSchedule(
         selectedVehicleId,
         departureTime,
         targetLimit,
         chargerPower,
       );
 
-      // 2. Poll for completion
-      await pollTaskStatus(task_id);
+      // 2. Poll for completion (skip if already done synchronously)
+      if (status !== 'completed_sync') {
+        await pollTaskStatus(task_id);
+      }
 
       // 3. Fetch the full schedule
       const result = await fetchSchedule(session_id);

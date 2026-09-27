@@ -4,8 +4,9 @@ Application configuration loaded from environment variables.
 Uses Pydantic BaseSettings for strict typing, validation, and .env file support.
 """
 
+import os
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,17 +27,23 @@ class Settings(BaseSettings):
     app_debug: bool = False
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    secret_key: str = Field(..., min_length=16)
+    secret_key: str = Field(default="dev-secret-key-change-in-prod")
 
-    # ── PostgreSQL ──────────────────────────────────────────
+    # ── Direct database URL (takes priority if set) ─────────
+    database_url_raw: Optional[str] = Field(default=None, alias="DATABASE_URL")
+
+    # ── PostgreSQL (fallback when DATABASE_URL is not set) ──
     postgres_user: str = "carbon_ev_user"
     postgres_password: str = Field(default="", min_length=0)
     postgres_db: str = "carbon_ev_db"
-    postgres_host: str = "postgres"
+    postgres_host: str = "localhost"
     postgres_port: int = 5432
 
     # ── Redis ───────────────────────────────────────────────
-    redis_url: str = "redis://redis:6379/0"
+    redis_url: str = "redis://localhost:6379/0"
+
+    # ── Frontend URL (for CORS in production) ───────────────
+    frontend_url: str = ""
 
     # ── WattTime API ────────────────────────────────────────
     watttime_username: str = ""
@@ -51,15 +58,25 @@ class Settings(BaseSettings):
     fernet_key: str = Field(default="", description="Fernet symmetric encryption key for token storage")
 
     # ── Database Connection Pool ────────────────────────────
-    db_pool_size: int = 10
-    db_max_overflow: int = 20
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
     db_pool_timeout: int = 30
-    db_pool_recycle: int = 1800  # 30 minutes
+    db_pool_recycle: int = 300
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
         """Construct the async PostgreSQL DSN."""
+        if self.database_url_raw:
+            url = self.database_url_raw
+            # Supabase gives postgres:// but asyncpg needs postgresql+asyncpg://
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif not url.startswith("postgresql+asyncpg://"):
+                url = "postgresql+asyncpg://" + url
+            return url
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -69,6 +86,11 @@ class Settings(BaseSettings):
     @property
     def database_url_sync(self) -> str:
         """Construct the sync PostgreSQL DSN (used by Alembic migrations)."""
+        if self.database_url_raw:
+            url = self.database_url_raw
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql://", 1)
+            return url
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -79,3 +101,4 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return a cached Settings singleton."""
     return Settings()  # type: ignore[call-arg]
+
