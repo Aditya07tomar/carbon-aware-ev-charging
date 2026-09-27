@@ -401,27 +401,30 @@ async def _generate_schedule_async(
         commands_enqueued = 0
 
         for block_start, block_end in blocks:
-            # Schedule START_CHARGE at block start
-            execute_smartcar_command.apply_async(
-                kwargs={
-                    "session_id": session_id,
-                    "command": "start_charge",
-                    "scheduled_time": block_start.isoformat(),
-                },
-                eta=block_start,  # execute at the exact scheduled time
-                queue="commands",
-            )
-            # Schedule STOP_CHARGE at block end
-            execute_smartcar_command.apply_async(
-                kwargs={
-                    "session_id": session_id,
-                    "command": "stop_charge",
-                    "scheduled_time": block_end.isoformat(),
-                },
-                eta=block_end,
-                queue="commands",
-            )
-            commands_enqueued += 2
+            try:
+                # Schedule START_CHARGE at block start
+                execute_smartcar_command.apply_async(
+                    kwargs={
+                        "session_id": session_id,
+                        "command": "start_charge",
+                        "scheduled_time": block_start.isoformat(),
+                    },
+                    eta=block_start,  # execute at the exact scheduled time
+                    queue="commands",
+                )
+                # Schedule STOP_CHARGE at block end
+                execute_smartcar_command.apply_async(
+                    kwargs={
+                        "session_id": session_id,
+                        "command": "stop_charge",
+                        "scheduled_time": block_end.isoformat(),
+                    },
+                    eta=block_end,
+                    queue="commands",
+                )
+                commands_enqueued += 2
+            except Exception as e:
+                logger.warning("Could not enqueue smartcar commands (likely Redis unavailable): %s", e)
 
         logger.info(
             "generate_charging_schedule: Complete — %d slots, %d blocks, "
