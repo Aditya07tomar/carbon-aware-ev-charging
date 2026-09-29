@@ -10,6 +10,8 @@ Configured with:
     • Late acks and task rejection on worker loss for reliability
 """
 
+import ssl
+
 from celery import Celery
 from celery.schedules import crontab
 
@@ -25,7 +27,12 @@ celery = Celery(
 )
 
 # ── Celery Configuration ───────────────────────────────────────────────────
+ssl_conf = {"ssl_cert_reqs": ssl.CERT_REQUIRED} if settings.redis_url.startswith("rediss://") else None
+
 celery.conf.update(
+    broker_use_ssl=ssl_conf,
+    redis_backend_use_ssl=ssl_conf,
+
     # Serialization
     task_serializer="json",
     result_serializer="json",

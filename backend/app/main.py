@@ -137,7 +137,10 @@ def create_app() -> FastAPI:
         redis_status = "connected"
         try:
             import redis as redis_lib
-            r = redis_lib.from_url(settings.redis_url, socket_timeout=2)
+            kwargs = {"socket_timeout": 2}
+            if settings.redis_url.startswith("rediss://"):
+                kwargs["ssl_cert_reqs"] = "required"
+            r = redis_lib.Redis.from_url(settings.redis_url, **kwargs)
             r.ping()
         except Exception:
             redis_status = "unavailable"
@@ -698,7 +701,10 @@ def create_app() -> FastAPI:
         # Try Celery first, fall back to synchronous execution
         try:
             import redis as redis_lib
-            r = redis_lib.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
+            kwargs = {"socket_connect_timeout": 2}
+            if settings.redis_url.startswith("rediss://"):
+                kwargs["ssl_cert_reqs"] = "required"
+            r = redis_lib.Redis.from_url(settings.redis_url, **kwargs)
             r.ping()
             # Redis is available — use Celery
             task = generate_charging_schedule.apply_async(
